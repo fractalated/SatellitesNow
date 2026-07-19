@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { projectToScreen } from './ar-projection';
+import { horizonScreenY, projectToScreen } from './ar-projection';
 
 const hFov = 65;
 const vFov = 65 * (720 / 1280);
@@ -91,5 +91,28 @@ describe('projectToScreen', () => {
       const jump = Math.sqrt(dx * dx + dy * dy);
       expect(jump).toBeLessThan(width * 0.35);
     }
+  });
+});
+
+describe('horizonScreenY', () => {
+  it('matches projectToScreen for el=0 targets at various azimuths within the FOV', () => {
+    const heading = { headingDeg: 40, pitchDeg: 15 };
+    const expectedY = horizonScreenY(heading.pitchDeg, vFov, height);
+
+    for (const azOffset of [-10, -5, 0, 5, 10]) {
+      const point = projectToScreen(heading.headingDeg + azOffset, 0, heading, hFov, vFov, width, height);
+      expect(point).not.toBeNull();
+      expect(point!.y).toBeCloseTo(expectedY, 6);
+    }
+  });
+
+  it('is centered when the camera is level (pitch 0)', () => {
+    expect(horizonScreenY(0, vFov, height)).toBeCloseTo(height / 2, 6);
+  });
+
+  it('moves down the screen as the camera tilts up (more sky visible)', () => {
+    const level = horizonScreenY(0, vFov, height);
+    const tiltedUp = horizonScreenY(20, vFov, height);
+    expect(tiltedUp).toBeGreaterThan(level);
   });
 });

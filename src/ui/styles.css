@@ -43,6 +43,10 @@ body {
   margin: 0;
 }
 
+.hero-graphic {
+  max-width: 280px;
+}
+
 .screen p {
   color: var(--dim);
   max-width: 32ch;

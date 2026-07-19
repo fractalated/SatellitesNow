@@ -1,9 +1,12 @@
 import type { SatelliteNow, SatelliteTrack } from '../../model/types';
+import { clamp } from '../../utils/math';
 import { ECLIPSED_TRACK_STROKE, ECLIPSED_TRACK_WIDTH, MARKER_ECLIPSED_COLOR, MARKER_SUNLIT_COLOR, SUNLIT_TRACK_STROKE, SUNLIT_TRACK_WIDTH } from '../common/track-style';
 import type { DeviceHeading } from './ar-projection';
-import { projectToScreen } from './ar-projection';
+import { horizonScreenY, projectToScreen } from './ar-projection';
+import { createGroundPattern } from './ground-texture';
 
 const TARGET_FRAME_INTERVAL_MS = 1000 / 30;
+const HORIZON_LINE_STROKE = 'rgba(180, 210, 190, 0.5)';
 
 /** Draws satellite labels + tracks onto a canvas overlaid on the live camera feed,
  * projected using the device's current pointing direction. Redraw is capped at
@@ -22,11 +25,13 @@ export class ArRenderer {
 
   private rafId: number | null = null;
   private lastFrameTime = 0;
+  private readonly groundPattern: CanvasPattern;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context unavailable.');
     this.ctx = ctx;
+    this.groundPattern = createGroundPattern(ctx);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -83,6 +88,8 @@ export class ArRenderer {
     if (width === 0 || height === 0) return;
 
     const vFovDeg = this.hFovDeg * (height / width);
+    this.drawGround(vFovDeg);
+
     // Only satellites currently above the horizon — see the matching comment in
     // PlanisphereRenderer.render for why (tracks exist for all tracked satellites
     // regardless of current position, which would otherwise clutter the view with
@@ -99,6 +106,31 @@ export class ArRenderer {
     }
   }
 
+  private drawGround(vFovDeg: number): void {
+    const { ctx, width, height, heading } = this;
+    const y = clamp(horizonScreenY(heading.pitchDeg, vFovDeg, height), 0, height);
+    if (y >= height) return; // camera pitched down enough that no ground is in frame
+
+    // One continuous gradient across the whole visible ground (not baked into the
+    // repeating tile, which would band at every tile boundary), with the seeded
+    // grass-blade pattern layered on top.
+    const gradient = ctx.createLinearGradient(0, y, 0, height);
+    gradient.addColorStop(0, '#0d150e');
+    gradient.addColorStop(1, '#050905');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, y, width, height - y);
+
+    ctx.fillStyle = this.groundPattern;
+    ctx.fillRect(0, y, width, height - y);
+
+    ctx.strokeStyle = HORIZON_LINE_STROKE;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
   private drawTrack(track: SatelliteTrack, vFovDeg: number): void {
     const { ctx, width, height, heading, hFovDeg } = this;
 
@@ -109,6 +141,11 @@ export class ArRenderer {
       for (let i = 0; i + 1 < segment.points.length; i++) {
         const a = segment.points[i];
         const b = segment.points[i + 1];
+        // Below-horizon points are hidden by the ground graphic anyway, but skip
+        // them explicitly rather than relying on that, so a track never visibly
+        // dips "into the ground" for cameras pitched down.
+        if (a.elDeg < 0 || b.elDeg < 0) continue;
+
         const pa = projectToScreen(a.azDeg, a.elDeg, heading, hFovDeg, vFovDeg, width, height);
         const pb = projectToScreen(b.azDeg, b.elDeg, heading, hFovDeg, vFovDeg, width, height);
         if (!pa || !pb) continue;

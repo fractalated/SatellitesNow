@@ -96,3 +96,17 @@ export function projectToScreen(
     y: (heightPx / 2) * (1 - yNorm),
   };
 }
+
+/**
+ * Screen Y coordinate of the true horizon (elevation 0), for a level camera (no
+ * roll). Because azimuth is degenerate along the horizon in exactly the way that
+ * makes elevation-0 points project to a constant y regardless of azimuth (proven
+ * algebraically: upComponent/forwardComponent for any el=0 target reduces to
+ * exactly -tan(pitch), independent of azimuth), the horizon is always a perfectly
+ * straight horizontal line whose height depends only on pitch and vertical FOV —
+ * no per-azimuth sampling needed. Used to draw a ground fill below it.
+ */
+export function horizonScreenY(pitchDeg: number, vFovDeg: number, heightPx: number): number {
+  const yNorm = Math.tan(degToRad(pitchDeg)) / Math.tan(degToRad(vFovDeg / 2));
+  return (heightPx / 2) * (1 + yNorm);
+}

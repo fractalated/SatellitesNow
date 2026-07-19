@@ -1,11 +1,13 @@
 import { getCurrentObserver, GeolocationError } from '../../geolocation/geolocation';
 import type { Observer } from '../../model/types';
 import { describeGeolocationError } from '../../permissions/permissions';
+import { HERO_GRAPHIC_SVG } from '../hero-graphic';
 
 export function mountOnboardingScreen(container: HTMLElement, onReady: (observer: Observer) => void): void {
   function render(errorMessage: string | null, busy: boolean): void {
     container.innerHTML = `
       <div class="screen">
+        ${HERO_GRAPHIC_SVG}
         <h1>SatellitesNow</h1>
         <p>To show which satellites are overhead, SatellitesNow needs your location. Nothing is sent to a server — everything runs on your device.</p>
         ${errorMessage ? `<p class="onboarding-error">${errorMessage}</p>` : ''}
