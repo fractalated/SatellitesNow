@@ -1,26 +1,30 @@
+import type { Observer } from './model/types';
 import { registerServiceWorker } from './pwa/register-sw';
 import { mountArScreen } from './ui/screens/ar-screen';
+import { mountOnboardingScreen } from './ui/screens/onboarding-screen';
 import { mountPlanisphereScreen } from './ui/screens/planisphere-screen';
 
-function renderStartScreen(app: HTMLElement): void {
+function renderModeSelect(app: HTMLElement, observer: Observer): void {
   app.innerHTML = `
     <div class="screen">
       <h1>SatellitesNow</h1>
-      <p>Live view of the brightest satellites passing overhead, using your location. Tracks fade where a satellite crosses into Earth's shadow.</p>
+      <p>Live view of the brightest satellites passing overhead. Tracks fade where a satellite crosses into Earth's shadow.</p>
       <button id="start-planisphere">Show sky map</button>
       <button id="start-ar">Point camera at the sky (AR)</button>
     </div>
   `;
 
   app.querySelector<HTMLButtonElement>('#start-planisphere')?.addEventListener('click', () => {
-    void mountPlanisphereScreen(app);
+    void mountPlanisphereScreen(app, observer);
   });
   app.querySelector<HTMLButtonElement>('#start-ar')?.addEventListener('click', () => {
-    void mountArScreen(app);
+    void mountArScreen(app, observer);
   });
 }
 
 const app = document.getElementById('app');
-if (app) renderStartScreen(app);
+if (app) {
+  mountOnboardingScreen(app, (observer) => renderModeSelect(app, observer));
+}
 
 registerServiceWorker();

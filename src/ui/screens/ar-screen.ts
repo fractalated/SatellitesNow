@@ -1,7 +1,10 @@
 import { ageMs } from '../../data/tle-cache';
 import { getTleSet, TleUnavailableError } from '../../data/tle-fetch';
-import { getCurrentObserver, GeolocationError } from '../../geolocation/geolocation';
 import type { Observer } from '../../model/types';
+import {
+  describeCameraError,
+  ORIENTATION_DENIED_MESSAGE,
+} from '../../permissions/permissions';
 import { PropagationClient } from '../../propagation/worker/propagation-client';
 import { ArRenderer } from '../../render/ar/ar-renderer';
 import { CameraError, startRearCamera } from '../../render/ar/camera';
@@ -14,7 +17,20 @@ function formatAge(ms: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
-export async function mountArScreen(container: HTMLElement): Promise<() => void> {
+export async function mountArScreen(container: HTMLElement, observer: Observer): Promise<() => void> {
+  function renderError(message: string): () => void {
+    container.innerHTML = `
+      <div class="screen">
+        <p class="onboarding-error">${message}</p>
+        <button id="ar-retry">Try again</button>
+      </div>
+    `;
+    container.querySelector<HTMLButtonElement>('#ar-retry')?.addEventListener('click', () => {
+      void mountArScreen(container, observer);
+    });
+    return () => {};
+  }
+
   container.innerHTML = `
     <div class="ar-screen">
       <video id="ar-video" autoplay muted playsinline></video>
@@ -30,31 +46,17 @@ export async function mountArScreen(container: HTMLElement): Promise<() => void>
 
   // Requested first, synchronously after the tap that opened this screen — iOS
   // Safari only grants DeviceOrientationEvent permission within a live user
-  // gesture, which can expire once other awaits (camera/geolocation prompts) run.
+  // gesture, which can expire once other awaits (camera prompts, etc.) run.
   const orientationGranted = await requestOrientationPermission();
   if (!orientationGranted) {
-    statusEl.textContent = 'Compass/motion access was denied — AR view needs it to point at satellites.';
-    return () => {};
+    return renderError(ORIENTATION_DENIED_MESSAGE);
   }
 
   let stopCamera: () => void;
   try {
     stopCamera = await startRearCamera(video);
   } catch (error) {
-    statusEl.textContent =
-      error instanceof CameraError ? error.message : 'Camera unavailable.';
-    return () => {};
-  }
-
-  statusEl.textContent = 'Getting your location…';
-  let observer: Observer;
-  try {
-    observer = await getCurrentObserver();
-  } catch (error) {
-    stopCamera();
-    statusEl.textContent =
-      error instanceof GeolocationError ? `Location unavailable: ${error.message}` : 'Location unavailable.';
-    return () => {};
+    return renderError(error instanceof CameraError ? describeCameraError(error) : 'Camera unavailable.');
   }
 
   statusEl.textContent = 'Loading satellite data…';
@@ -63,11 +65,11 @@ export async function mountArScreen(container: HTMLElement): Promise<() => void>
     tleResult = await getTleSet();
   } catch (error) {
     stopCamera();
-    statusEl.textContent =
+    return renderError(
       error instanceof TleUnavailableError
         ? 'No satellite data available (offline and no cached data yet).'
-        : 'Failed to load satellite data.';
-    return () => {};
+        : 'Failed to load satellite data.',
+    );
   }
 
   statusEl.textContent = tleResult.refreshFailed

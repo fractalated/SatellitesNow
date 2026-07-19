@@ -1,6 +1,5 @@
 import { getTleSet, TleUnavailableError } from '../../data/tle-fetch';
 import { ageMs } from '../../data/tle-cache';
-import { getCurrentObserver, GeolocationError } from '../../geolocation/geolocation';
 import type { Observer } from '../../model/types';
 import { PropagationClient } from '../../propagation/worker/propagation-client';
 import { PlanisphereRenderer } from '../../render/planisphere/planisphere-renderer';
@@ -12,10 +11,10 @@ function formatAge(ms: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
-export async function mountPlanisphereScreen(container: HTMLElement): Promise<() => void> {
+export async function mountPlanisphereScreen(container: HTMLElement, observer: Observer): Promise<() => void> {
   container.innerHTML = `
     <div class="planisphere-screen">
-      <div class="planisphere-status" id="planisphere-status">Getting your location…</div>
+      <div class="planisphere-status" id="planisphere-status">Loading satellite data…</div>
       <canvas id="planisphere-canvas"></canvas>
     </div>
   `;
@@ -23,20 +22,6 @@ export async function mountPlanisphereScreen(container: HTMLElement): Promise<()
   const statusEl = container.querySelector<HTMLDivElement>('#planisphere-status');
   const canvas = container.querySelector<HTMLCanvasElement>('#planisphere-canvas');
   if (!statusEl || !canvas) throw new Error('Planisphere screen failed to mount.');
-
-  let observer: Observer;
-  try {
-    observer = await getCurrentObserver();
-  } catch (error) {
-    const message =
-      error instanceof GeolocationError
-        ? `Location unavailable: ${error.message}`
-        : 'Location unavailable.';
-    statusEl.textContent = message;
-    return () => {};
-  }
-
-  statusEl.textContent = 'Loading satellite data…';
 
   let tleResult;
   try {
