@@ -1,0 +1,35 @@
+<svg viewBox="0 0 192 192" width="192" height="192" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0a0d14"/>
+      <stop offset="100%" stop-color="#05060a"/>
+    </linearGradient>
+    <radialGradient id="earth" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" stop-color="#2a6a82"/>
+      <stop offset="55%" stop-color="#123d4d"/>
+      <stop offset="100%" stop-color="#081b22"/>
+    </radialGradient>
+    <linearGradient id="track" x1="0%" y1="0%" x2="100%" y2="60%">
+      <stop offset="0%" stop-color="#6fd3ff" stop-opacity="0"/>
+      <stop offset="60%" stop-color="#6fd3ff" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#eaf6ff" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed background: maskable icons get cropped to arbitrary shapes
+       (circle, squircle, ...) by the OS, so the background must reach the edges
+       even though the foreground content is inset to the safe zone below. -->
+  <rect x="0" y="0" width="192" height="192" fill="url(#bg)"/>
+
+  <g transform="translate(96,96) scale(0.72) translate(-96,-96)">
+    <circle cx="24" cy="24" r="1.6" fill="#c7d3de" opacity="0.6"/>
+    <circle cx="150" cy="18" r="1.4" fill="#c7d3de" opacity="0.55"/>
+    <circle cx="170" cy="50" r="1.3" fill="#c7d3de" opacity="0.5"/>
+
+    <path d="M 22 46 Q 90 24 150 62" fill="none" stroke="url(#track)" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="150" cy="62" r="13" fill="#eaf6ff" opacity="0.18"/>
+    <circle cx="150" cy="62" r="6" fill="#eaf6ff"/>
+
+    <circle cx="96" cy="235" r="150" fill="url(#earth)"/>
+  </g>
+</svg>
