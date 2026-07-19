@@ -54,13 +54,19 @@ export class PlanisphereRenderer {
     ctx.clearRect(0, 0, width, height);
     this.drawSkyDome(centerX, centerY, radius);
 
+    // Only draw satellites that are actually above the horizon right now. Tracks are
+    // built for all tracked satellites regardless of current position, so without this
+    // filter dozens of objects that are mostly below horizon and only briefly grazing
+    // it sometime in the next 20 minutes would clutter the chart with short arcs near
+    // the rim, swamping the few satellites genuinely passing overhead.
+    const visibleSatellites = satellites.filter((satellite) => satellite.elDeg >= 0);
     const tracksById = new Map(tracks.map((track) => [track.id, track]));
-    for (const satellite of satellites) {
+    for (const satellite of visibleSatellites) {
       const track = tracksById.get(satellite.id);
       if (track) this.drawTrack(track, centerX, centerY, radius);
     }
-    for (const satellite of satellites) {
-      if (satellite.elDeg >= 0) this.drawMarker(satellite, centerX, centerY, radius);
+    for (const satellite of visibleSatellites) {
+      this.drawMarker(satellite, centerX, centerY, radius);
     }
   }
 

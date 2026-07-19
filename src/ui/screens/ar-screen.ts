@@ -14,16 +14,24 @@ function formatAge(ms: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
-export async function mountArScreen(container: HTMLElement, observer: Observer): Promise<() => void> {
+export async function mountArScreen(
+  container: HTMLElement,
+  observer: Observer,
+  onSwitchToPlanisphere: () => void,
+): Promise<() => void> {
   function renderError(message: string): () => void {
     container.innerHTML = `
       <div class="screen">
         <p class="onboarding-error">${message}</p>
         <button id="ar-retry">Try again</button>
+        <button id="ar-back-to-map">Back to sky map</button>
       </div>
     `;
     container.querySelector<HTMLButtonElement>('#ar-retry')?.addEventListener('click', () => {
-      void mountArScreen(container, observer);
+      void mountArScreen(container, observer, onSwitchToPlanisphere);
+    });
+    container.querySelector<HTMLButtonElement>('#ar-back-to-map')?.addEventListener('click', () => {
+      onSwitchToPlanisphere();
     });
     return () => {};
   }
@@ -33,13 +41,15 @@ export async function mountArScreen(container: HTMLElement, observer: Observer):
       <video id="ar-video" autoplay muted playsinline></video>
       <canvas id="ar-canvas"></canvas>
       <div class="ar-status" id="ar-status">Requesting sensor access…</div>
+      <button id="switch-to-map" class="view-switch">Sky map</button>
     </div>
   `;
 
   const statusEl = container.querySelector<HTMLDivElement>('#ar-status');
   const video = container.querySelector<HTMLVideoElement>('#ar-video');
   const canvas = container.querySelector<HTMLCanvasElement>('#ar-canvas');
-  if (!statusEl || !video || !canvas) throw new Error('AR screen failed to mount.');
+  const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-map');
+  if (!statusEl || !video || !canvas || !switchButton) throw new Error('AR screen failed to mount.');
 
   // Requested first, synchronously after the tap that opened this screen — iOS
   // Safari only grants DeviceOrientationEvent permission within a live user
@@ -82,11 +92,18 @@ export async function mountArScreen(container: HTMLElement, observer: Observer):
 
   renderer.start();
 
-  return () => {
+  function cleanup(): void {
     renderer.destroy();
     stopOrientation();
     unsubscribe();
     client.stop();
     stopCamera();
-  };
+  }
+
+  switchButton.addEventListener('click', () => {
+    cleanup();
+    onSwitchToPlanisphere();
+  });
+
+  return cleanup;
 }

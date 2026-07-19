@@ -4,6 +4,14 @@ import { mountArScreen } from './ui/screens/ar-screen';
 import { mountOnboardingScreen } from './ui/screens/onboarding-screen';
 import { mountPlanisphereScreen } from './ui/screens/planisphere-screen';
 
+function showPlanisphere(app: HTMLElement, observer: Observer): void {
+  void mountPlanisphereScreen(app, observer, () => showAr(app, observer));
+}
+
+function showAr(app: HTMLElement, observer: Observer): void {
+  void mountArScreen(app, observer, () => showPlanisphere(app, observer));
+}
+
 function renderModeSelect(app: HTMLElement, observer: Observer): void {
   app.innerHTML = `
     <div class="screen">
@@ -15,10 +23,10 @@ function renderModeSelect(app: HTMLElement, observer: Observer): void {
   `;
 
   app.querySelector<HTMLButtonElement>('#start-planisphere')?.addEventListener('click', () => {
-    void mountPlanisphereScreen(app, observer);
+    showPlanisphere(app, observer);
   });
   app.querySelector<HTMLButtonElement>('#start-ar')?.addEventListener('click', () => {
-    void mountArScreen(app, observer);
+    showAr(app, observer);
   });
 }
 

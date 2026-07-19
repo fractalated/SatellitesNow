@@ -83,13 +83,18 @@ export class ArRenderer {
     if (width === 0 || height === 0) return;
 
     const vFovDeg = this.hFovDeg * (height / width);
+    // Only satellites currently above the horizon — see the matching comment in
+    // PlanisphereRenderer.render for why (tracks exist for all tracked satellites
+    // regardless of current position, which would otherwise clutter the view with
+    // brief rise/set arcs from objects that aren't actually up right now).
+    const visibleSatellites = this.satellites.filter((satellite) => satellite.elDeg >= 0);
     const tracksById = new Map(this.tracks.map((track) => [track.id, track]));
 
-    for (const satellite of this.satellites) {
+    for (const satellite of visibleSatellites) {
       const track = tracksById.get(satellite.id);
       if (track) this.drawTrack(track, vFovDeg);
     }
-    for (const satellite of this.satellites) {
+    for (const satellite of visibleSatellites) {
       this.drawMarker(satellite, vFovDeg);
     }
   }

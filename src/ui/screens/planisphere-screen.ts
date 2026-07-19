@@ -11,17 +11,23 @@ function formatAge(ms: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
-export async function mountPlanisphereScreen(container: HTMLElement, observer: Observer): Promise<() => void> {
+export async function mountPlanisphereScreen(
+  container: HTMLElement,
+  observer: Observer,
+  onSwitchToAr: () => void,
+): Promise<() => void> {
   container.innerHTML = `
     <div class="planisphere-screen">
       <div class="planisphere-status" id="planisphere-status">Loading satellite data…</div>
+      <button id="switch-to-ar" class="view-switch">AR view</button>
       <canvas id="planisphere-canvas"></canvas>
     </div>
   `;
 
   const statusEl = container.querySelector<HTMLDivElement>('#planisphere-status');
   const canvas = container.querySelector<HTMLCanvasElement>('#planisphere-canvas');
-  if (!statusEl || !canvas) throw new Error('Planisphere screen failed to mount.');
+  const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-ar');
+  if (!statusEl || !canvas || !switchButton) throw new Error('Planisphere screen failed to mount.');
 
   let tleResult;
   try {
@@ -45,9 +51,16 @@ export async function mountPlanisphereScreen(container: HTMLElement, observer: O
   const unsubscribe = client.onUpdate((update) => renderer.render(update.satellites, update.tracks));
   await client.start(tleResult.tleSet.records, observer);
 
-  return () => {
+  function cleanup(): void {
     unsubscribe();
     client.stop();
     renderer.destroy();
-  };
+  }
+
+  switchButton.addEventListener('click', () => {
+    cleanup();
+    onSwitchToAr();
+  });
+
+  return cleanup;
 }
