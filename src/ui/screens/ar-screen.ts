@@ -1,10 +1,7 @@
 import { ageMs } from '../../data/tle-cache';
 import { getTleSet, TleUnavailableError } from '../../data/tle-fetch';
 import type { Observer } from '../../model/types';
-import {
-  describeCameraError,
-  ORIENTATION_DENIED_MESSAGE,
-} from '../../permissions/permissions';
+import { describeCameraError, orientationDeniedMessage } from '../../permissions/permissions';
 import { PropagationClient } from '../../propagation/worker/propagation-client';
 import { ArRenderer } from '../../render/ar/ar-renderer';
 import { CameraError, startRearCamera } from '../../render/ar/camera';
@@ -49,7 +46,7 @@ export async function mountArScreen(container: HTMLElement, observer: Observer):
   // gesture, which can expire once other awaits (camera prompts, etc.) run.
   const orientationGranted = await requestOrientationPermission();
   if (!orientationGranted) {
-    return renderError(ORIENTATION_DENIED_MESSAGE);
+    return renderError(orientationDeniedMessage());
   }
 
   let stopCamera: () => void;
