@@ -41,15 +41,17 @@ export async function mountArScreen(
       <video id="ar-video" autoplay muted playsinline></video>
       <canvas id="ar-canvas"></canvas>
       <div class="ar-status" id="ar-status">Requesting sensor access…</div>
+      <div class="ar-debug" id="ar-debug">build ${__BUILD_ID__}</div>
       <button id="switch-to-map" class="view-switch">Sky map</button>
     </div>
   `;
 
   const statusEl = container.querySelector<HTMLDivElement>('#ar-status');
+  const debugEl = container.querySelector<HTMLDivElement>('#ar-debug');
   const video = container.querySelector<HTMLVideoElement>('#ar-video');
   const canvas = container.querySelector<HTMLCanvasElement>('#ar-canvas');
   const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-map');
-  if (!statusEl || !video || !canvas || !switchButton) throw new Error('AR screen failed to mount.');
+  if (!statusEl || !debugEl || !video || !canvas || !switchButton) throw new Error('AR screen failed to mount.');
 
   // Requested first, synchronously after the tap that opened this screen — iOS
   // Safari only grants DeviceOrientationEvent permission within a live user
@@ -84,7 +86,10 @@ export async function mountArScreen(
     : `${tleResult.tleSet.records.length} tracked satellites — data ${formatAge(ageMs(tleResult.tleSet))}`;
 
   const renderer = new ArRenderer(canvas);
-  const stopOrientation = startOrientationTracking((heading) => renderer.updateHeading(heading));
+  const stopOrientation = startOrientationTracking((heading) => {
+    renderer.updateHeading(heading);
+    debugEl.textContent = `build ${__BUILD_ID__} · hdg ${heading.headingDeg.toFixed(0)}° pitch ${heading.pitchDeg.toFixed(0)}°`;
+  });
 
   const client = new PropagationClient();
   const unsubscribe = client.onUpdate((update) => renderer.updateSatellites(update.satellites, update.tracks));

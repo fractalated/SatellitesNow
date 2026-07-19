@@ -80,9 +80,15 @@ class CircularSmoother {
 /**
  * Subscribes to device orientation, unifying iOS/Android quirks into a smoothed
  * {headingDeg, pitchDeg} stream. Returns an unsubscribe function.
+ *
+ * Listens for both 'deviceorientationabsolute' and 'deviceorientation' rather than
+ * picking one via `'ondeviceorientationabsolute' in window` — that property can be
+ * defined (truthy) by a browser's DOM even when the event itself never actually
+ * fires (confirmed in headless Chromium with no real sensors), which would silently
+ * freeze tracking on any platform where that mismatch holds. If both fire, it's
+ * harmless — they report the same physical orientation.
  */
 export function startOrientationTracking(onUpdate: (heading: DeviceHeading) => void): () => void {
-  const eventName = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
   const smoother = new CircularSmoother();
   let smoothedPitch: number | null = null;
 
@@ -97,6 +103,10 @@ export function startOrientationTracking(onUpdate: (heading: DeviceHeading) => v
     onUpdate({ headingDeg, pitchDeg: smoothedPitch });
   };
 
-  window.addEventListener(eventName, handler);
-  return () => window.removeEventListener(eventName, handler);
+  window.addEventListener('deviceorientationabsolute', handler);
+  window.addEventListener('deviceorientation', handler);
+  return () => {
+    window.removeEventListener('deviceorientationabsolute', handler);
+    window.removeEventListener('deviceorientation', handler);
+  };
 }

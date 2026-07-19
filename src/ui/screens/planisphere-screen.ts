@@ -41,9 +41,9 @@ export async function mountPlanisphereScreen(
   }
 
   if (tleResult.refreshFailed) {
-    statusEl.textContent = `Showing cached data (refresh failed) — ${formatAge(ageMs(tleResult.tleSet))}`;
+    statusEl.textContent = `Showing cached data (refresh failed) — ${formatAge(ageMs(tleResult.tleSet))} — build ${__BUILD_ID__}`;
   } else {
-    statusEl.textContent = `${tleResult.tleSet.records.length} tracked satellites — data ${formatAge(ageMs(tleResult.tleSet))}`;
+    statusEl.textContent = `${tleResult.tleSet.records.length} tracked satellites — data ${formatAge(ageMs(tleResult.tleSet))} — build ${__BUILD_ID__}`;
   }
 
   const renderer = new PlanisphereRenderer(canvas);
