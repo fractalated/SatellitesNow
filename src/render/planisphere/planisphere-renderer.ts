@@ -94,8 +94,9 @@ export class PlanisphereRenderer {
     const compassMargin = 14;
     ctx.fillText('N', centerX, centerY - radius - compassMargin / 2);
     ctx.fillText('S', centerX, centerY + radius + compassMargin / 2);
-    ctx.fillText('E', centerX + radius + compassMargin / 2, centerY);
-    ctx.fillText('W', centerX - radius - compassMargin / 2, centerY);
+    // East on the left, West on the right — matches azElToScreen's convention.
+    ctx.fillText('E', centerX - radius - compassMargin / 2, centerY);
+    ctx.fillText('W', centerX + radius + compassMargin / 2, centerY);
   }
 
   private drawTrack(track: SatelliteTrack, centerX: number, centerY: number, radius: number): void {
