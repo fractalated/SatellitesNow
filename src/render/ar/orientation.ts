@@ -1,10 +1,11 @@
-import { clamp, degToRad, radToDeg, wrapDeg360 } from '../../utils/math';
+import { clamp, degToRad, radToDeg, wrapDeg180, wrapDeg360 } from '../../utils/math';
 import type { DeviceHeading } from './ar-projection';
 
 const SMOOTHING_ALPHA = 0.15;
 
 interface IOSDeviceOrientationEvent extends DeviceOrientationEvent {
   webkitCompassHeading?: number;
+  webkitCompassAccuracy?: number;
 }
 
 /**
@@ -60,7 +61,7 @@ class CircularSmoother {
   private x: number | null = null;
   private y: number | null = null;
 
-  next(headingDeg: number): number {
+  next(headingDeg: number, alpha: number = SMOOTHING_ALPHA): number {
     const rad = degToRad(headingDeg);
     const cx = Math.cos(rad);
     const cy = Math.sin(rad);
@@ -69,38 +70,94 @@ class CircularSmoother {
       this.x = cx;
       this.y = cy;
     } else {
-      this.x += (cx - this.x) * SMOOTHING_ALPHA;
-      this.y += (cy - this.y) * SMOOTHING_ALPHA;
+      this.x += (cx - this.x) * alpha;
+      this.y += (cy - this.y) * alpha;
     }
 
     return wrapDeg360(radToDeg(Math.atan2(this.y, this.x)));
   }
 }
 
+/** Beyond this raw frame-to-frame heading jump, treat the sample as compass noise
+ * (indoor magnetic interference is the classic cause) rather than real motion, and
+ * blend it in far more slowly instead of snapping to it immediately. */
+export const OUTLIER_JUMP_THRESHOLD_DEG = 45;
+export const OUTLIER_SMOOTHING_ALPHA = 0.03;
+
+export interface RawOrientationSample {
+  hasCompassHeading: boolean;
+  headingDeg: number;
+  betaDeg: number;
+  gammaDeg: number;
+  accuracyDeg?: number;
+}
+
+/**
+ * Pure, DOM-free decision logic for turning a stream of raw orientation samples
+ * into a smoothed heading/pitch, deliberately separated from the window event
+ * wiring so it's directly unit-testable. Two rules exist specifically because of a
+ * real bug: mixing a true-north `webkitCompassHeading` source with a differently
+ * referenced raw-`alpha` source in the same smoother produced large, erratic jumps
+ * that looked like satellite tracks jumping all over the sky even though heading
+ * only changed slightly.
+ */
+export class OrientationTracker {
+  private readonly smoother = new CircularSmoother();
+  private smoothedPitch: number | null = null;
+  private lastRawHeading: number | null = null;
+  private sawCompassHeading = false;
+
+  /** Returns null when this sample should be ignored (a non-compass source arriving
+   * after a compass-bearing source is already active). */
+  process(sample: RawOrientationSample): DeviceHeading | null {
+    if (sample.hasCompassHeading) {
+      this.sawCompassHeading = true;
+    } else if (this.sawCompassHeading) {
+      return null;
+    }
+
+    const alpha =
+      this.lastRawHeading !== null &&
+      Math.abs(wrapDeg180(sample.headingDeg - this.lastRawHeading)) > OUTLIER_JUMP_THRESHOLD_DEG
+        ? OUTLIER_SMOOTHING_ALPHA
+        : SMOOTHING_ALPHA;
+    this.lastRawHeading = sample.headingDeg;
+
+    const headingDeg = this.smoother.next(sample.headingDeg, alpha);
+    const rawPitch = computePitchDeg(sample.betaDeg, sample.gammaDeg);
+    this.smoothedPitch =
+      this.smoothedPitch === null ? rawPitch : this.smoothedPitch + (rawPitch - this.smoothedPitch) * SMOOTHING_ALPHA;
+
+    return { headingDeg, pitchDeg: this.smoothedPitch, accuracyDeg: sample.accuracyDeg };
+  }
+}
+
 /**
  * Subscribes to device orientation, unifying iOS/Android quirks into a smoothed
- * {headingDeg, pitchDeg} stream. Returns an unsubscribe function.
+ * {headingDeg, pitchDeg} stream via OrientationTracker. Returns an unsubscribe
+ * function.
  *
- * Listens for both 'deviceorientationabsolute' and 'deviceorientation' rather than
- * picking one via `'ondeviceorientationabsolute' in window` — that property can be
- * defined (truthy) by a browser's DOM even when the event itself never actually
- * fires (confirmed in headless Chromium with no real sensors), which would silently
- * freeze tracking on any platform where that mismatch holds. If both fire, it's
- * harmless — they report the same physical orientation.
+ * Listens for both 'deviceorientationabsolute' and 'deviceorientation' — Chrome
+ * exposes 'ondeviceorientationabsolute' in window even when the event never
+ * actually fires (confirmed in headless testing with no real sensors), which would
+ * silently freeze tracking if that were the only signal picking which event to use.
  */
 export function startOrientationTracking(onUpdate: (heading: DeviceHeading) => void): () => void {
-  const smoother = new CircularSmoother();
-  let smoothedPitch: number | null = null;
+  const tracker = new OrientationTracker();
 
   const handler = (event: Event) => {
     const orientationEvent = event as IOSDeviceOrientationEvent;
     if (orientationEvent.beta === null || orientationEvent.gamma === null) return;
 
-    const headingDeg = smoother.next(computeHeadingDeg(orientationEvent));
-    const rawPitch = computePitchDeg(orientationEvent.beta ?? 0, orientationEvent.gamma ?? 0);
-    smoothedPitch = smoothedPitch === null ? rawPitch : smoothedPitch + (rawPitch - smoothedPitch) * SMOOTHING_ALPHA;
+    const heading = tracker.process({
+      hasCompassHeading: typeof orientationEvent.webkitCompassHeading === 'number',
+      headingDeg: computeHeadingDeg(orientationEvent),
+      betaDeg: orientationEvent.beta ?? 0,
+      gammaDeg: orientationEvent.gamma ?? 0,
+      accuracyDeg: orientationEvent.webkitCompassAccuracy,
+    });
 
-    onUpdate({ headingDeg, pitchDeg: smoothedPitch });
+    if (heading) onUpdate(heading);
   };
 
   window.addEventListener('deviceorientationabsolute', handler);

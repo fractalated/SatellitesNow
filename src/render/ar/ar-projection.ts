@@ -3,6 +3,11 @@ import { degToRad } from '../../utils/math';
 export interface DeviceHeading {
   headingDeg: number;
   pitchDeg: number;
+  /** iOS-only compass accuracy in degrees (lower is better); undefined if unknown
+   * (e.g. Android, or before the first reading). A large value or -1 (invalid,
+   * reported by iOS when the compass hasn't been calibrated) means headingDeg is
+   * unreliable — commonly caused by indoor magnetic interference. */
+  accuracyDeg?: number;
 }
 
 export interface ScreenPoint {

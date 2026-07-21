@@ -41,6 +41,9 @@ export async function mountArScreen(
       <video id="ar-video" autoplay muted playsinline></video>
       <canvas id="ar-canvas"></canvas>
       <div class="ar-status" id="ar-status">Requesting sensor access…</div>
+      <div class="ar-compass-warning" id="ar-compass-warning" hidden>
+        Compass accuracy is low, so satellite positions may drift or jump — move away from metal, electronics, or building wiring (or try outdoors) for accurate tracking.
+      </div>
       <div class="ar-debug" id="ar-debug">
         <div id="ar-debug-heading">build ${__BUILD_ID__} · obs ${observer.latDeg.toFixed(2)},${observer.lonDeg.toFixed(2)}</div>
         <div id="ar-debug-sats">waiting for satellite data…</div>
@@ -50,12 +53,13 @@ export async function mountArScreen(
   `;
 
   const statusEl = container.querySelector<HTMLDivElement>('#ar-status');
+  const compassWarningEl = container.querySelector<HTMLDivElement>('#ar-compass-warning');
   const debugHeadingEl = container.querySelector<HTMLDivElement>('#ar-debug-heading');
   const debugSatsEl = container.querySelector<HTMLDivElement>('#ar-debug-sats');
   const video = container.querySelector<HTMLVideoElement>('#ar-video');
   const canvas = container.querySelector<HTMLCanvasElement>('#ar-canvas');
   const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-map');
-  if (!statusEl || !debugHeadingEl || !debugSatsEl || !video || !canvas || !switchButton) {
+  if (!statusEl || !compassWarningEl || !debugHeadingEl || !debugSatsEl || !video || !canvas || !switchButton) {
     throw new Error('AR screen failed to mount.');
   }
 
@@ -94,7 +98,13 @@ export async function mountArScreen(
   const renderer = new ArRenderer(canvas);
   const stopOrientation = startOrientationTracking((heading) => {
     renderer.updateHeading(heading);
-    debugHeadingEl.textContent = `build ${__BUILD_ID__} · obs ${observer.latDeg.toFixed(2)},${observer.lonDeg.toFixed(2)} · hdg ${heading.headingDeg.toFixed(0)}° pitch ${heading.pitchDeg.toFixed(0)}°`;
+
+    const accuracyText =
+      heading.accuracyDeg === undefined ? '' : ` · compass ±${Math.max(heading.accuracyDeg, 0).toFixed(0)}°`;
+    debugHeadingEl.textContent = `build ${__BUILD_ID__} · obs ${observer.latDeg.toFixed(2)},${observer.lonDeg.toFixed(2)} · hdg ${heading.headingDeg.toFixed(0)}° pitch ${heading.pitchDeg.toFixed(0)}°${accuracyText}`;
+
+    const compassUnreliable = heading.accuracyDeg !== undefined && (heading.accuracyDeg < 0 || heading.accuracyDeg > 30);
+    compassWarningEl.hidden = !compassUnreliable;
   });
 
   const client = new PropagationClient();
