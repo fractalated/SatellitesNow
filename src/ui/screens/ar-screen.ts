@@ -41,17 +41,23 @@ export async function mountArScreen(
       <video id="ar-video" autoplay muted playsinline></video>
       <canvas id="ar-canvas"></canvas>
       <div class="ar-status" id="ar-status">Requesting sensor access…</div>
-      <div class="ar-debug" id="ar-debug">build ${__BUILD_ID__}</div>
+      <div class="ar-debug" id="ar-debug">
+        <div id="ar-debug-heading">build ${__BUILD_ID__} · obs ${observer.latDeg.toFixed(2)},${observer.lonDeg.toFixed(2)}</div>
+        <div id="ar-debug-sats">waiting for satellite data…</div>
+      </div>
       <button id="switch-to-map" class="view-switch">Sky map</button>
     </div>
   `;
 
   const statusEl = container.querySelector<HTMLDivElement>('#ar-status');
-  const debugEl = container.querySelector<HTMLDivElement>('#ar-debug');
+  const debugHeadingEl = container.querySelector<HTMLDivElement>('#ar-debug-heading');
+  const debugSatsEl = container.querySelector<HTMLDivElement>('#ar-debug-sats');
   const video = container.querySelector<HTMLVideoElement>('#ar-video');
   const canvas = container.querySelector<HTMLCanvasElement>('#ar-canvas');
   const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-map');
-  if (!statusEl || !debugEl || !video || !canvas || !switchButton) throw new Error('AR screen failed to mount.');
+  if (!statusEl || !debugHeadingEl || !debugSatsEl || !video || !canvas || !switchButton) {
+    throw new Error('AR screen failed to mount.');
+  }
 
   // Requested first, synchronously after the tap that opened this screen — iOS
   // Safari only grants DeviceOrientationEvent permission within a live user
@@ -88,11 +94,25 @@ export async function mountArScreen(
   const renderer = new ArRenderer(canvas);
   const stopOrientation = startOrientationTracking((heading) => {
     renderer.updateHeading(heading);
-    debugEl.textContent = `build ${__BUILD_ID__} · hdg ${heading.headingDeg.toFixed(0)}° pitch ${heading.pitchDeg.toFixed(0)}°`;
+    debugHeadingEl.textContent = `build ${__BUILD_ID__} · obs ${observer.latDeg.toFixed(2)},${observer.lonDeg.toFixed(2)} · hdg ${heading.headingDeg.toFixed(0)}° pitch ${heading.pitchDeg.toFixed(0)}°`;
   });
 
   const client = new PropagationClient();
-  const unsubscribe = client.onUpdate((update) => renderer.updateSatellites(update.satellites, update.tracks));
+  const unsubscribe = client.onUpdate((update) => {
+    renderer.updateSatellites(update.satellites, update.tracks);
+
+    // Top 3 by elevation regardless of sign, so it's obvious even when nothing is
+    // currently above the horizon — this is the ground-truth cross-check number:
+    // compare against a known site (e.g. Heavens-Above) for the same satellite,
+    // time, and location to tell data/math bugs apart from "it just wasn't a good
+    // pass right now".
+    const topByElevation = [...update.satellites].sort((a, b) => b.elDeg - a.elDeg).slice(0, 3);
+    debugSatsEl.textContent = topByElevation.length
+      ? topByElevation
+          .map((s) => `${s.name} az${s.azDeg.toFixed(0)} el${s.elDeg.toFixed(0)}`)
+          .join(' · ')
+      : 'no satellite data yet';
+  });
   await client.start(tleResult.tleSet.records, observer);
 
   renderer.start();
