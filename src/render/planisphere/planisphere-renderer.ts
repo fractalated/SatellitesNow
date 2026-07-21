@@ -133,6 +133,6 @@ export class PlanisphereRenderer {
     ctx.font = '11px -apple-system, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(satellite.name, x + 8, y);
+    ctx.fillText(`${satellite.name} (${satellite.magnitude.toFixed(1)})`, x + 8, y);
   }
 }

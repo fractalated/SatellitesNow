@@ -1,4 +1,5 @@
 import { degToRad } from '../../utils/math';
+import { cross, dot, normalize, type Vec3 } from '../../utils/vec3';
 
 export interface DeviceHeading {
   headingDeg: number;
@@ -15,12 +16,6 @@ export interface ScreenPoint {
   y: number;
 }
 
-interface Vec3 {
-  x: number;
-  y: number;
-  z: number;
-}
-
 /** Unit vector in an East/North/Up frame for a given azimuth (clockwise from
  * North) and elevation (0 = horizon, 90 = zenith). */
 function azElToUnitVector(azDeg: number, elDeg: number): Vec3 {
@@ -28,19 +23,6 @@ function azElToUnitVector(azDeg: number, elDeg: number): Vec3 {
   const elRad = degToRad(elDeg);
   const cosEl = Math.cos(elRad);
   return { x: cosEl * Math.sin(azRad), y: cosEl * Math.cos(azRad), z: Math.sin(elRad) };
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function normalize(a: Vec3): Vec3 {
-  const len = Math.sqrt(dot(a, a)) || 1;
-  return { x: a.x / len, y: a.y / len, z: a.z / len };
 }
 
 /**

@@ -1,27 +1,21 @@
-import { TLE_CACHE_STORAGE_KEY, TLE_MAX_AGE_MS } from '../utils/constants';
+import { IDB_TLE_STORE } from '../utils/constants';
+import { idbGet, idbSet } from './idb-cache';
 import type { TleSet } from './types';
 
-export function loadCachedTleSet(): TleSet | null {
-  const raw = localStorage.getItem(TLE_CACHE_STORAGE_KEY);
-  if (!raw) return null;
+const TLE_CACHE_KEY = 'active';
 
-  try {
-    const parsed = JSON.parse(raw) as TleSet;
-    if (!Array.isArray(parsed.records) || typeof parsed.fetchedAt !== 'number') return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+export function loadCachedTleSet(): Promise<TleSet | null> {
+  return idbGet<TleSet>(IDB_TLE_STORE, TLE_CACHE_KEY);
 }
 
-export function saveTleSet(tleSet: TleSet): void {
-  localStorage.setItem(TLE_CACHE_STORAGE_KEY, JSON.stringify(tleSet));
+export function saveTleSet(tleSet: TleSet): Promise<void> {
+  return idbSet(IDB_TLE_STORE, TLE_CACHE_KEY, tleSet);
 }
 
-export function isStale(tleSet: TleSet, now: number = Date.now()): boolean {
-  return now - tleSet.fetchedAt > TLE_MAX_AGE_MS;
+export function isStale(entry: { fetchedAt: number }, maxAgeMs: number, now: number = Date.now()): boolean {
+  return now - entry.fetchedAt > maxAgeMs;
 }
 
-export function ageMs(tleSet: TleSet, now: number = Date.now()): number {
-  return now - tleSet.fetchedAt;
+export function ageMs(entry: { fetchedAt: number }, now: number = Date.now()): number {
+  return now - entry.fetchedAt;
 }

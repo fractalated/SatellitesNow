@@ -1,5 +1,7 @@
-import { getTleSet, TleUnavailableError } from '../../data/tle-fetch';
 import { ageMs } from '../../data/tle-cache';
+import { getTleSet, TleUnavailableError } from '../../data/tle-fetch';
+import { buildSizeIndex, getSizeSet } from '../../data/satcat-fetch';
+import type { SizeRecord } from '../../data/types';
 import type { Observer } from '../../model/types';
 import { PropagationClient } from '../../propagation/worker/propagation-client';
 import { PlanisphereRenderer } from '../../render/planisphere/planisphere-renderer';
@@ -9,6 +11,16 @@ function formatAge(ms: number): string {
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes}m ago`;
   return `${Math.round(minutes / 60)}h ago`;
+}
+
+async function loadSizeIndex(): Promise<Map<number, SizeRecord>> {
+  try {
+    return buildSizeIndex(await getSizeSet());
+  } catch {
+    // Size data only refines the brightness estimate; missing it just means every
+    // object falls back to a generic size assumption, not a blocking failure.
+    return new Map();
+  }
 }
 
 export async function mountPlanisphereScreen(
@@ -30,8 +42,11 @@ export async function mountPlanisphereScreen(
   if (!statusEl || !canvas || !switchButton) throw new Error('Planisphere screen failed to mount.');
 
   let tleResult;
+  let sizeIndex;
   try {
-    tleResult = await getTleSet();
+    // loadSizeIndex() never rejects (it degrades to an empty map internally), so
+    // only the TLE fetch can cause this to throw.
+    [tleResult, sizeIndex] = await Promise.all([getTleSet(), loadSizeIndex()]);
   } catch (error) {
     statusEl.textContent =
       error instanceof TleUnavailableError
@@ -43,13 +58,13 @@ export async function mountPlanisphereScreen(
   if (tleResult.refreshFailed) {
     statusEl.textContent = `Showing cached data (refresh failed) — ${formatAge(ageMs(tleResult.tleSet))} — build ${__BUILD_ID__}`;
   } else {
-    statusEl.textContent = `${tleResult.tleSet.records.length} tracked satellites — data ${formatAge(ageMs(tleResult.tleSet))} — build ${__BUILD_ID__}`;
+    statusEl.textContent = `${tleResult.tleSet.records.length} satellites tracked, showing brightest visible — data ${formatAge(ageMs(tleResult.tleSet))} — build ${__BUILD_ID__}`;
   }
 
   const renderer = new PlanisphereRenderer(canvas);
   const client = new PropagationClient();
   const unsubscribe = client.onUpdate((update) => renderer.render(update.satellites, update.tracks));
-  await client.start(tleResult.tleSet.records, observer);
+  await client.start(tleResult.tleSet.records, sizeIndex, observer);
 
   function cleanup(): void {
     unsubscribe();

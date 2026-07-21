@@ -11,6 +11,8 @@ export interface SatelliteNow {
   elDeg: number;
   rangeKm: number;
   illuminated: boolean;
+  /** Estimated apparent visual magnitude (lower = brighter); see astro/magnitude.ts. */
+  magnitude: number;
 }
 
 export interface TrackPoint {

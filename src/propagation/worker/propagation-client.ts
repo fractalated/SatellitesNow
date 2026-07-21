@@ -1,6 +1,6 @@
 import * as Comlink from 'comlink';
 import type { Remote } from 'comlink';
-import type { TleRecord } from '../../data/types';
+import type { SizeRecord, TleRecord } from '../../data/types';
 import type { Observer, SatelliteNow, SatelliteTrack } from '../../model/types';
 import type { PropagationWorkerApi } from './propagation-api';
 
@@ -27,8 +27,8 @@ export class PropagationClient {
     this.api = Comlink.wrap<PropagationWorkerApi>(this.worker);
   }
 
-  async start(records: TleRecord[], observer: Observer): Promise<void> {
-    await this.api.loadTle(records);
+  async start(records: TleRecord[], sizeIndex: Map<number, SizeRecord>, observer: Observer): Promise<void> {
+    await this.api.loadTle(records, sizeIndex);
     await this.api.setObserver(observer);
     await this.refreshTracks();
     await this.tickSnapshot();

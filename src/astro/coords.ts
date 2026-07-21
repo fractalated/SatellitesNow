@@ -1,4 +1,4 @@
-import { ecfToLookAngles, eciToEcf, gstime } from 'satellite.js';
+import { ecfToEci, ecfToLookAngles, eciToEcf, geodeticToEcf, gstime } from 'satellite.js';
 import type { EciVec3, GeodeticLocation } from 'satellite.js';
 import { degToRad, radToDeg, wrapDeg360 } from '../utils/math';
 
@@ -37,4 +37,12 @@ export function lookAnglesDeg(
     elDeg: radToDeg(look.elevation),
     rangeKm: look.rangeSat,
   };
+}
+
+/** Observer's position in the ECI frame at a given instant — needed to compute the
+ * satellite-to-observer direction for phase-angle-based brightness estimation. */
+export function observerEciPosition(observer: ObserverDeg, date: Date): EciVec3<number> {
+  const gmst = gstime(date);
+  const ecf = geodeticToEcf(toGeodeticLocation(observer));
+  return ecfToEci(ecf, gmst);
 }

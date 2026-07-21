@@ -1,4 +1,4 @@
-import { CELESTRAK_VISUAL_TLE_URL } from '../utils/constants';
+import { CELESTRAK_ACTIVE_TLE_URL, TLE_MAX_AGE_MS } from '../utils/constants';
 import { isStale, loadCachedTleSet, saveTleSet } from './tle-cache';
 import { parseTleText } from './tle-parser';
 import type { TleSet } from './types';
@@ -12,7 +12,7 @@ export class TleUnavailableError extends Error {
 }
 
 async function fetchFreshTleSet(): Promise<TleSet> {
-  const response = await fetch(CELESTRAK_VISUAL_TLE_URL);
+  const response = await fetch(CELESTRAK_ACTIVE_TLE_URL);
   if (!response.ok) {
     throw new Error(`CelesTrak request failed: ${response.status}`);
   }
@@ -39,15 +39,15 @@ export interface TleResult {
  * Throws TleUnavailableError only when there is no usable data at all.
  */
 export async function getTleSet(): Promise<TleResult> {
-  const cached = loadCachedTleSet();
+  const cached = await loadCachedTleSet();
 
-  if (cached && !isStale(cached)) {
+  if (cached && !isStale(cached, TLE_MAX_AGE_MS)) {
     return { tleSet: cached, fromCache: true, refreshFailed: false };
   }
 
   try {
     const fresh = await fetchFreshTleSet();
-    saveTleSet(fresh);
+    await saveTleSet(fresh);
     return { tleSet: fresh, fromCache: false, refreshFailed: false };
   } catch (error) {
     if (cached) {

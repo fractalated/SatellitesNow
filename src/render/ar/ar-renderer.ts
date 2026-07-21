@@ -169,12 +169,13 @@ export class ArRenderer {
     ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
     ctx.fill();
 
+    const label = `${satellite.name} (${satellite.magnitude.toFixed(1)})`;
     ctx.font = '13px -apple-system, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillText(satellite.name, point.x + 9, point.y + 1);
+    ctx.fillText(label, point.x + 9, point.y + 1);
     ctx.fillStyle = color;
-    ctx.fillText(satellite.name, point.x + 8, point.y);
+    ctx.fillText(label, point.x + 8, point.y);
   }
 }

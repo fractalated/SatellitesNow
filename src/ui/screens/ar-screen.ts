@@ -1,5 +1,7 @@
 import { ageMs } from '../../data/tle-cache';
 import { getTleSet, TleUnavailableError } from '../../data/tle-fetch';
+import { buildSizeIndex, getSizeSet } from '../../data/satcat-fetch';
+import type { SizeRecord } from '../../data/types';
 import type { Observer } from '../../model/types';
 import { describeCameraError, orientationDeniedMessage } from '../../permissions/permissions';
 import { PropagationClient } from '../../propagation/worker/propagation-client';
@@ -12,6 +14,14 @@ function formatAge(ms: number): string {
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes}m ago`;
   return `${Math.round(minutes / 60)}h ago`;
+}
+
+async function loadSizeIndex(): Promise<Map<number, SizeRecord>> {
+  try {
+    return buildSizeIndex(await getSizeSet());
+  } catch {
+    return new Map();
+  }
 }
 
 export async function mountArScreen(
@@ -80,8 +90,11 @@ export async function mountArScreen(
 
   statusEl.textContent = 'Loading satellite data…';
   let tleResult;
+  let sizeIndex;
   try {
-    tleResult = await getTleSet();
+    // loadSizeIndex() never rejects (it degrades to an empty map internally), so
+    // only the TLE fetch can cause this to throw.
+    [tleResult, sizeIndex] = await Promise.all([getTleSet(), loadSizeIndex()]);
   } catch (error) {
     stopCamera();
     return renderError(
@@ -93,7 +106,7 @@ export async function mountArScreen(
 
   statusEl.textContent = tleResult.refreshFailed
     ? `Showing cached data (refresh failed) — ${formatAge(ageMs(tleResult.tleSet))}`
-    : `${tleResult.tleSet.records.length} tracked satellites — data ${formatAge(ageMs(tleResult.tleSet))}`;
+    : `${tleResult.tleSet.records.length} satellites tracked, showing brightest visible — data ${formatAge(ageMs(tleResult.tleSet))}`;
 
   const renderer = new ArRenderer(canvas);
   const stopOrientation = startOrientationTracking((heading) => {
@@ -111,19 +124,17 @@ export async function mountArScreen(
   const unsubscribe = client.onUpdate((update) => {
     renderer.updateSatellites(update.satellites, update.tracks);
 
-    // Top 3 by elevation regardless of sign, so it's obvious even when nothing is
-    // currently above the horizon — this is the ground-truth cross-check number:
-    // compare against a known site (e.g. Heavens-Above) for the same satellite,
-    // time, and location to tell data/math bugs apart from "it just wasn't a good
-    // pass right now".
-    const topByElevation = [...update.satellites].sort((a, b) => b.elDeg - a.elDeg).slice(0, 3);
-    debugSatsEl.textContent = topByElevation.length
-      ? topByElevation
-          .map((s) => `${s.name} az${s.azDeg.toFixed(0)} el${s.elDeg.toFixed(0)}`)
-          .join(' · ')
-      : 'no satellite data yet';
+    // Brightest-first (lowest magnitude), since the worker already filters to
+    // "above horizon and bright enough" -- this is the ground-truth cross-check
+    // number: compare against a known site (e.g. Heavens-Above) for the same
+    // satellite, time, and location to tell data bugs apart from "it just wasn't a
+    // good pass right now".
+    const brightest = [...update.satellites].sort((a, b) => a.magnitude - b.magnitude).slice(0, 3);
+    debugSatsEl.textContent = brightest.length
+      ? brightest.map((s) => `${s.name} az${s.azDeg.toFixed(0)} el${s.elDeg.toFixed(0)} mag${s.magnitude.toFixed(1)}`).join(' · ')
+      : 'no bright satellites currently visible';
   });
-  await client.start(tleResult.tleSet.records, observer);
+  await client.start(tleResult.tleSet.records, sizeIndex, observer);
 
   renderer.start();
 

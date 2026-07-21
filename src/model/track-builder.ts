@@ -11,12 +11,12 @@ import type { SatelliteTrack, TrackPoint, TrackSegment } from './types';
  * it crosses into Earth's shadow). Segments share their boundary point so the
  * polyline stays visually continuous across a style change.
  */
-export function buildTrack(satrec: SatRec, observer: ObserverDeg, id: string, now: Date): SatelliteTrack {
+export function buildTrack(satrec: SatRec, observer: ObserverDeg, id: string, now: Date, sizeM2: number): SatelliteTrack {
   const points: TrackPoint[] = [];
 
   for (let tOffsetSec = -TRACK_TRAIL_SEC; tOffsetSec <= TRACK_FORWARD_MAX_SEC; tOffsetSec += TRACK_STEP_SEC) {
     const sampleDate = new Date(now.getTime() + tOffsetSec * 1000);
-    const pos = computeSatellitePosition(satrec, observer, sampleDate);
+    const pos = computeSatellitePosition(satrec, observer, sampleDate, sizeM2);
     if (!pos) continue;
     points.push({ tOffsetSec, azDeg: pos.azDeg, elDeg: pos.elDeg, sunlit: pos.illuminated });
   }
