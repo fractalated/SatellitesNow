@@ -78,11 +78,22 @@ class CircularSmoother {
   }
 }
 
-/** Beyond this raw frame-to-frame heading jump, treat the sample as compass noise
- * (indoor magnetic interference is the classic cause) rather than real motion, and
- * blend it in far more slowly instead of snapping to it immediately. */
+/** Beyond this jump from the current displayed heading, don't trust the sample
+ * immediately -- some phones' tilt-compensated compass calculation is genuinely
+ * unstable at specific pitch transitions (reported: a clean ~180deg flip at
+ * pitchDeg~45, reproduced in the phone's own native Compass app, so it's a
+ * device/OS sensor-fusion issue, not something wrong with the incoming data
+ * stream itself -- webkitCompassHeading really is reporting a different, wrong
+ * value some of the time). */
 export const OUTLIER_JUMP_THRESHOLD_DEG = 45;
-export const OUTLIER_SMOOTHING_ALPHA = 0.03;
+/** How close consecutive big-jump samples must stay to each other to count as the
+ * same candidate (rather than each restarting the confirmation count from noise
+ * bouncing around). */
+export const JUMP_CONFIRM_TOLERANCE_DEG = 25;
+/** Consecutive agreeing samples required before a big jump is trusted and applied.
+ * At a typical ~30-60Hz event rate this is well under a quarter second -- enough to
+ * reject brief flips/flutter without adding noticeable lag to a genuine turn. */
+export const JUMP_CONFIRM_SAMPLES = 6;
 
 export interface RawOrientationSample {
   hasCompassHeading: boolean;
@@ -95,16 +106,29 @@ export interface RawOrientationSample {
 /**
  * Pure, DOM-free decision logic for turning a stream of raw orientation samples
  * into a smoothed heading/pitch, deliberately separated from the window event
- * wiring so it's directly unit-testable. Two rules exist specifically because of a
- * real bug: mixing a true-north `webkitCompassHeading` source with a differently
- * referenced raw-`alpha` source in the same smoother produced large, erratic jumps
- * that looked like satellite tracks jumping all over the sky even though heading
- * only changed slightly.
+ * wiring so it's directly unit-testable.
+ *
+ * Two defensive rules exist here because of real, observed problems:
+ * 1. Mixing a true-north `webkitCompassHeading` source with a differently
+ *    referenced raw-`alpha` source in the same smoother produced large, erratic
+ *    jumps that looked like satellite tracks jumping all over the sky even though
+ *    heading only changed slightly -- fixed by ignoring the non-compass source
+ *    once a compass-bearing one is active.
+ * 2. Some phones' own tilt-compensated compass reading flips ~180deg at a specific
+ *    pitch (reproduced in the phone's native Compass app -- a device/OS issue, not
+ *    fixable here). A single bad sample can't be told apart from a genuine fast
+ *    turn by looking at it alone, so any jump past OUTLIER_JUMP_THRESHOLD_DEG is
+ *    held as a *candidate* and only applied once JUMP_CONFIRM_SAMPLES consecutive
+ *    readings agree with each other -- filtering out a brief flip/flutter while
+ *    still tracking a real sustained reorientation (turning around, or following a
+ *    satellite pass across zenith) after a small, deliberate delay.
  */
 export class OrientationTracker {
   private readonly smoother = new CircularSmoother();
   private smoothedPitch: number | null = null;
-  private lastRawHeading: number | null = null;
+  private lastSmoothedHeading: number | null = null;
+  private pendingHeading: number | null = null;
+  private pendingConfirmCount = 0;
   private sawCompassHeading = false;
 
   /** Returns null when this sample should be ignored (a non-compass source arriving
@@ -116,19 +140,46 @@ export class OrientationTracker {
       return null;
     }
 
-    const alpha =
-      this.lastRawHeading !== null &&
-      Math.abs(wrapDeg180(sample.headingDeg - this.lastRawHeading)) > OUTLIER_JUMP_THRESHOLD_DEG
-        ? OUTLIER_SMOOTHING_ALPHA
-        : SMOOTHING_ALPHA;
-    this.lastRawHeading = sample.headingDeg;
+    const headingDeg = this.resolveHeading(sample.headingDeg);
 
-    const headingDeg = this.smoother.next(sample.headingDeg, alpha);
     const rawPitch = computePitchDeg(sample.betaDeg, sample.gammaDeg);
     this.smoothedPitch =
       this.smoothedPitch === null ? rawPitch : this.smoothedPitch + (rawPitch - this.smoothedPitch) * SMOOTHING_ALPHA;
 
     return { headingDeg, pitchDeg: this.smoothedPitch, accuracyDeg: sample.accuracyDeg };
+  }
+
+  private resolveHeading(rawHeadingDeg: number): number {
+    if (this.lastSmoothedHeading === null) {
+      this.lastSmoothedHeading = this.smoother.next(rawHeadingDeg, 1);
+      return this.lastSmoothedHeading;
+    }
+
+    const jumpFromCurrent = Math.abs(wrapDeg180(rawHeadingDeg - this.lastSmoothedHeading));
+    if (jumpFromCurrent <= OUTLIER_JUMP_THRESHOLD_DEG) {
+      this.pendingHeading = null;
+      this.pendingConfirmCount = 0;
+      this.lastSmoothedHeading = this.smoother.next(rawHeadingDeg, SMOOTHING_ALPHA);
+      return this.lastSmoothedHeading;
+    }
+
+    // A big jump: only count it toward confirmation if it agrees with whatever
+    // candidate we were already tracking, otherwise start a new candidate.
+    if (this.pendingHeading !== null && Math.abs(wrapDeg180(rawHeadingDeg - this.pendingHeading)) <= JUMP_CONFIRM_TOLERANCE_DEG) {
+      this.pendingConfirmCount++;
+    } else {
+      this.pendingHeading = rawHeadingDeg;
+      this.pendingConfirmCount = 1;
+    }
+
+    if (this.pendingConfirmCount >= JUMP_CONFIRM_SAMPLES) {
+      this.pendingHeading = null;
+      this.pendingConfirmCount = 0;
+      this.lastSmoothedHeading = this.smoother.next(rawHeadingDeg, 1); // confirmed: snap, don't blend from the stale old value
+      return this.lastSmoothedHeading;
+    }
+
+    return this.lastSmoothedHeading; // unconfirmed -- hold at the last trusted value
   }
 }
 

@@ -54,17 +54,55 @@ describe('OrientationTracker', () => {
     }
   });
 
-  it('heavily damps a large sudden heading jump instead of snapping to it', () => {
+  it('holds heading steady on a single large jump instead of moving toward it at all', () => {
     const tracker = new OrientationTracker();
     for (let i = 0; i < 10; i++) {
       tracker.process({ hasCompassHeading: true, headingDeg: 90, betaDeg: 90, gammaDeg: 0 });
     }
 
-    // A single big jump (simulating an indoor magnetic glitch) should barely move
-    // the smoothed output on the very next sample.
+    // A single big jump (e.g. one bad compass sample) shouldn't move the displayed
+    // heading at all yet -- it's an unconfirmed candidate until several consecutive
+    // samples agree with it.
     const afterJump = tracker.process({ hasCompassHeading: true, headingDeg: 270, betaDeg: 90, gammaDeg: 0 });
     expect(afterJump).not.toBeNull();
-    expect(Math.abs(afterJump!.headingDeg - 90)).toBeLessThan(15);
+    expect(afterJump!.headingDeg).toBeCloseTo(90, 5);
+  });
+
+  // Regression test for a real, reported device issue: some phones' tilt-compensated
+  // compass reading flips ~180deg at a specific pitch and flips back, reproduced by
+  // the reporter in their phone's own native Compass app -- confirming it's a
+  // device/OS sensor-fusion quirk, not something wrong with this app's math. The
+  // fix can't correct the phone's sensor, but it can refuse to react to a flip that
+  // doesn't hold steady.
+  it('rejects a brief flip/flutter that never sustains for long enough to confirm', () => {
+    const tracker = new OrientationTracker();
+    for (let i = 0; i < 10; i++) {
+      tracker.process({ hasCompassHeading: true, headingDeg: 90, betaDeg: 90, gammaDeg: 0 });
+    }
+
+    // Flutters back and forth between the real heading and the flipped one, never
+    // staying on either long enough to reach JUMP_CONFIRM_SAMPLES in a row.
+    let last;
+    for (const headingDeg of [270, 91, 269, 89, 271, 90, 268]) {
+      last = tracker.process({ hasCompassHeading: true, headingDeg, betaDeg: 90, gammaDeg: 0 })!;
+    }
+    // The 91/89/90 samples are within the normal (non-outlier) threshold and blend
+    // in as ordinary small jitter, so this won't be exactly 90 -- the point is it
+    // stays near the real heading, nowhere near the flipped ~270 candidate.
+    expect(last!.headingDeg).toBeCloseTo(90, 1);
+  });
+
+  it('accepts a large jump once it sustains for JUMP_CONFIRM_SAMPLES in a row (a real turn)', () => {
+    const tracker = new OrientationTracker();
+    for (let i = 0; i < 10; i++) {
+      tracker.process({ hasCompassHeading: true, headingDeg: 90, betaDeg: 90, gammaDeg: 0 });
+    }
+
+    let last;
+    for (let i = 0; i < 6; i++) {
+      last = tracker.process({ hasCompassHeading: true, headingDeg: 270, betaDeg: 90, gammaDeg: 0 })!;
+    }
+    expect(last!.headingDeg).toBeCloseTo(270, 5);
   });
 
   it('tracks a real, gradual turn responsively (not treated as noise)', () => {
