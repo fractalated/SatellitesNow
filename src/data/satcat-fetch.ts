@@ -9,6 +9,13 @@ interface RawSatcatRecord {
   NORAD_CAT_ID: number;
   RCS?: number;
   OBJECT_TYPE?: string;
+  OBJECT_ID?: string;
+  OWNER?: string;
+  LAUNCH_DATE?: string;
+  PERIOD?: number;
+  INCLINATION?: number;
+  APOGEE?: number;
+  PERIGEE?: number;
 }
 
 async function fetchFreshSizeSet(): Promise<SizeSet> {
@@ -21,6 +28,13 @@ async function fetchFreshSizeSet(): Promise<SizeSet> {
     noradId: r.NORAD_CAT_ID,
     rcsM2: typeof r.RCS === 'number' && r.RCS > 0 ? r.RCS : undefined,
     objectType: r.OBJECT_TYPE,
+    objectId: r.OBJECT_ID,
+    owner: r.OWNER,
+    launchDate: r.LAUNCH_DATE,
+    period: r.PERIOD,
+    inclination: r.INCLINATION,
+    apogeeKm: r.APOGEE,
+    perigeeKm: r.PERIGEE,
   }));
   return { records, fetchedAt: Date.now() };
 }

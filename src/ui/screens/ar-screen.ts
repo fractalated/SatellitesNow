@@ -8,6 +8,7 @@ import { PropagationClient } from '../../propagation/worker/propagation-client';
 import { ArRenderer } from '../../render/ar/ar-renderer';
 import { CameraError, startRearCamera } from '../../render/ar/camera';
 import { requestOrientationPermission, startOrientationTracking } from '../../render/ar/orientation';
+import { mountSatellitePopup } from '../satellite-popup';
 
 function formatAge(ms: number): string {
   const minutes = Math.round(ms / 60000);
@@ -62,6 +63,7 @@ export async function mountArScreen(
     </div>
   `;
 
+  const screenEl = container.querySelector<HTMLDivElement>('.ar-screen');
   const statusEl = container.querySelector<HTMLDivElement>('#ar-status');
   const compassWarningEl = container.querySelector<HTMLDivElement>('#ar-compass-warning');
   const debugHeadingEl = container.querySelector<HTMLDivElement>('#ar-debug-heading');
@@ -69,7 +71,7 @@ export async function mountArScreen(
   const video = container.querySelector<HTMLVideoElement>('#ar-video');
   const canvas = container.querySelector<HTMLCanvasElement>('#ar-canvas');
   const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-map');
-  if (!statusEl || !compassWarningEl || !debugHeadingEl || !debugSatsEl || !video || !canvas || !switchButton) {
+  if (!screenEl || !statusEl || !compassWarningEl || !debugHeadingEl || !debugSatsEl || !video || !canvas || !switchButton) {
     throw new Error('AR screen failed to mount.');
   }
 
@@ -109,6 +111,12 @@ export async function mountArScreen(
     : `${tleResult.tleSet.records.length} satellites tracked, showing brightest visible — data ${formatAge(ageMs(tleResult.tleSet))}`;
 
   const renderer = new ArRenderer(canvas);
+  const popup = mountSatellitePopup(screenEl, () => renderer.setSelectedId(null));
+  renderer.onSatelliteClick((satellite) => {
+    renderer.setSelectedId(satellite.id);
+    popup.show(satellite, sizeIndex.get(Number(satellite.id)));
+  });
+
   const stopOrientation = startOrientationTracking((heading) => {
     renderer.updateHeading(heading);
 

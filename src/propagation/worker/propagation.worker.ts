@@ -3,7 +3,7 @@ import type { SizeRecord, TleRecord } from '../../data/types';
 import { computeSatellitePosition } from '../../model/satellite-state';
 import { buildTrack } from '../../model/track-builder';
 import type { Observer, SatelliteNow, SatelliteTrack } from '../../model/types';
-import { MAGNITUDE_VISIBLE_THRESHOLD } from '../../utils/constants';
+import { MAGNITUDE_VISIBLE_THRESHOLD, MAX_VISIBLE_SATELLITES } from '../../utils/constants';
 import { buildSatrecStore, type SatrecEntry } from '../satrec-store';
 import type { PropagationWorkerApi } from './propagation-api';
 
@@ -43,10 +43,16 @@ class PropagationWorker implements PropagationWorkerApi {
     const now = new Date(nowMs);
     const observer = this.observer;
 
-    this.visibleEntries = this.entries.filter((entry) => {
+    const candidates: { entry: SatrecEntry; magnitude: number }[] = [];
+    for (const entry of this.entries) {
       const pos = computeSatellitePosition(entry.satrec, observer, now, entry.sizeM2);
-      return pos !== null && pos.elDeg >= 0 && pos.magnitude <= MAGNITUDE_VISIBLE_THRESHOLD;
-    });
+      if (pos && pos.elDeg >= 0 && pos.magnitude <= MAGNITUDE_VISIBLE_THRESHOLD) {
+        candidates.push({ entry, magnitude: pos.magnitude });
+      }
+    }
+    candidates.sort((a, b) => a.magnitude - b.magnitude);
+
+    this.visibleEntries = candidates.slice(0, MAX_VISIBLE_SATELLITES).map((c) => c.entry);
 
     return this.visibleEntries.map((entry) => buildTrack(entry.satrec, observer, entry.id, now, entry.sizeM2));
   }

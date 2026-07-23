@@ -7,8 +7,15 @@ import { createGroundPattern } from './ground-texture';
 
 const TARGET_FRAME_INTERVAL_MS = 1000 / 30;
 const HORIZON_LINE_STROKE = 'rgba(180, 210, 190, 0.5)';
+const HIT_RADIUS_PX = 22;
 
-/** Draws satellite labels + tracks onto a canvas overlaid on the live camera feed,
+interface MarkerPosition {
+  satellite: SatelliteNow;
+  x: number;
+  y: number;
+}
+
+/** Draws satellite markers + tracks onto a canvas overlaid on the live camera feed,
  * projected using the device's current pointing direction. Redraw is capped at
  * ~30fps to leave headroom for the concurrently running camera/GPS/compass. */
 export class ArRenderer {
@@ -22,6 +29,9 @@ export class ArRenderer {
   private satellites: SatelliteNow[] = [];
   private tracks: SatelliteTrack[] = [];
   private heading: DeviceHeading = { headingDeg: 0, pitchDeg: 0 };
+  private lastMarkers: MarkerPosition[] = [];
+  private selectedId: string | null = null;
+  private clickHandler: ((satellite: SatelliteNow) => void) | null = null;
 
   private rafId: number | null = null;
   private lastFrameTime = 0;
@@ -36,6 +46,8 @@ export class ArRenderer {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
+
+    this.canvas.addEventListener('click', this.handleClick);
   }
 
   setHorizontalFovDeg(deg: number): void {
@@ -49,6 +61,14 @@ export class ArRenderer {
 
   updateHeading(heading: DeviceHeading): void {
     this.heading = heading;
+  }
+
+  onSatelliteClick(handler: (satellite: SatelliteNow) => void): void {
+    this.clickHandler = handler;
+  }
+
+  setSelectedId(id: string | null): void {
+    this.selectedId = id;
   }
 
   start(): void {
@@ -70,7 +90,25 @@ export class ArRenderer {
   destroy(): void {
     this.stop();
     this.resizeObserver.disconnect();
+    this.canvas.removeEventListener('click', this.handleClick);
   }
+
+  private readonly handleClick = (event: MouseEvent): void => {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    let best: MarkerPosition | null = null;
+    let bestDist = HIT_RADIUS_PX;
+    for (const marker of this.lastMarkers) {
+      const dist = Math.hypot(marker.x - x, marker.y - y);
+      if (dist <= bestDist) {
+        best = marker;
+        bestDist = dist;
+      }
+    }
+    if (best) this.clickHandler?.(best.satellite);
+  };
 
   private resize(): void {
     this.dpr = window.devicePixelRatio || 1;
@@ -101,6 +139,8 @@ export class ArRenderer {
       const track = tracksById.get(satellite.id);
       if (track) this.drawTrack(track, vFovDeg);
     }
+
+    this.lastMarkers = [];
     for (const satellite of visibleSatellites) {
       this.drawMarker(satellite, vFovDeg);
     }
@@ -163,19 +203,21 @@ export class ArRenderer {
     const point = projectToScreen(satellite.azDeg, satellite.elDeg, heading, hFovDeg, vFovDeg, width, height);
     if (!point) return;
 
+    this.lastMarkers.push({ satellite, x: point.x, y: point.y });
+
     const color = satellite.illuminated ? MARKER_SUNLIT_COLOR : MARKER_ECLIPSED_COLOR;
+
+    if (satellite.id === this.selectedId) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 11, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
     ctx.fill();
-
-    const label = `${satellite.name} (${satellite.magnitude.toFixed(1)})`;
-    ctx.font = '13px -apple-system, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillText(label, point.x + 9, point.y + 1);
-    ctx.fillStyle = color;
-    ctx.fillText(label, point.x + 8, point.y);
   }
 }

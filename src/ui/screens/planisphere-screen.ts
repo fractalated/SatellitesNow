@@ -5,6 +5,7 @@ import type { SizeRecord } from '../../data/types';
 import type { Observer } from '../../model/types';
 import { PropagationClient } from '../../propagation/worker/propagation-client';
 import { PlanisphereRenderer } from '../../render/planisphere/planisphere-renderer';
+import { mountSatellitePopup } from '../satellite-popup';
 
 function formatAge(ms: number): string {
   const minutes = Math.round(ms / 60000);
@@ -36,10 +37,11 @@ export async function mountPlanisphereScreen(
     </div>
   `;
 
+  const screenEl = container.querySelector<HTMLDivElement>('.planisphere-screen');
   const statusEl = container.querySelector<HTMLDivElement>('#planisphere-status');
   const canvas = container.querySelector<HTMLCanvasElement>('#planisphere-canvas');
   const switchButton = container.querySelector<HTMLButtonElement>('#switch-to-ar');
-  if (!statusEl || !canvas || !switchButton) throw new Error('Planisphere screen failed to mount.');
+  if (!screenEl || !statusEl || !canvas || !switchButton) throw new Error('Planisphere screen failed to mount.');
 
   let tleResult;
   let sizeIndex;
@@ -62,6 +64,12 @@ export async function mountPlanisphereScreen(
   }
 
   const renderer = new PlanisphereRenderer(canvas);
+  const popup = mountSatellitePopup(screenEl, () => renderer.setSelectedId(null));
+  renderer.onSatelliteClick((satellite) => {
+    renderer.setSelectedId(satellite.id);
+    popup.show(satellite, sizeIndex.get(Number(satellite.id)));
+  });
+
   const client = new PropagationClient();
   const unsubscribe = client.onUpdate((update) => renderer.render(update.satellites, update.tracks));
   await client.start(tleResult.tleSet.records, sizeIndex, observer);

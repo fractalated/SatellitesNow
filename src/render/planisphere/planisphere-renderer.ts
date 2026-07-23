@@ -13,6 +13,13 @@ import { azElToScreen } from './projection';
 
 const HORIZON_STROKE = 'rgba(199, 211, 222, 0.4)';
 const GRID_STROKE = 'rgba(199, 211, 222, 0.15)';
+const HIT_RADIUS_PX = 16;
+
+interface MarkerPosition {
+  satellite: SatelliteNow;
+  x: number;
+  y: number;
+}
 
 export class PlanisphereRenderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -20,6 +27,9 @@ export class PlanisphereRenderer {
   private width = 0;
   private height = 0;
   private dpr = 1;
+  private lastMarkers: MarkerPosition[] = [];
+  private selectedId: string | null = null;
+  private clickHandler: ((satellite: SatelliteNow) => void) | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -29,11 +39,39 @@ export class PlanisphereRenderer {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
+
+    this.canvas.addEventListener('click', this.handleClick);
+  }
+
+  onSatelliteClick(handler: (satellite: SatelliteNow) => void): void {
+    this.clickHandler = handler;
+  }
+
+  setSelectedId(id: string | null): void {
+    this.selectedId = id;
   }
 
   destroy(): void {
     this.resizeObserver.disconnect();
+    this.canvas.removeEventListener('click', this.handleClick);
   }
+
+  private readonly handleClick = (event: MouseEvent): void => {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    let best: MarkerPosition | null = null;
+    let bestDist = HIT_RADIUS_PX;
+    for (const marker of this.lastMarkers) {
+      const dist = Math.hypot(marker.x - x, marker.y - y);
+      if (dist <= bestDist) {
+        best = marker;
+        bestDist = dist;
+      }
+    }
+    if (best) this.clickHandler?.(best.satellite);
+  };
 
   private resize(): void {
     this.dpr = window.devicePixelRatio || 1;
@@ -65,6 +103,8 @@ export class PlanisphereRenderer {
       const track = tracksById.get(satellite.id);
       if (track) this.drawTrack(track, centerX, centerY, radius);
     }
+
+    this.lastMarkers = [];
     for (const satellite of visibleSatellites) {
       this.drawMarker(satellite, centerX, centerY, radius);
     }
@@ -124,15 +164,19 @@ export class PlanisphereRenderer {
     const { x, y } = azElToScreen(satellite.azDeg, satellite.elDeg, centerX, centerY, radius);
     const color = satellite.illuminated ? MARKER_SUNLIT_COLOR : MARKER_ECLIPSED_COLOR;
 
+    this.lastMarkers.push({ satellite, x, y });
+
+    if (satellite.id === this.selectedId) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 9, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, 4, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = LABEL_COLOR;
-    ctx.font = '11px -apple-system, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${satellite.name} (${satellite.magnitude.toFixed(1)})`, x + 8, y);
   }
 }

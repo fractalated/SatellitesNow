@@ -23,7 +23,10 @@ export const IDB_DATABASE_NAME = 'satellitesnow';
 export const IDB_TLE_STORE = 'tleCache';
 export const IDB_SIZE_STORE = 'sizeCache';
 
-/** Naked-eye limiting magnitude under reasonably dark skies. Satellites dimmer than
- * this are filtered out entirely rather than cluttering the view with objects that
- * realistically won't be seen. */
+/** Naked-eye limiting magnitude under reasonably dark skies -- a loose upper bound;
+ * MAX_VISIBLE_SATELLITES below does most of the actual decluttering. */
 export const MAGNITUDE_VISIBLE_THRESHOLD = 6.0;
+
+/** Only the brightest N currently-visible satellites are shown at all, so the view
+ * stays readable instead of listing every technically-above-threshold object. */
+export const MAX_VISIBLE_SATELLITES = 10;
