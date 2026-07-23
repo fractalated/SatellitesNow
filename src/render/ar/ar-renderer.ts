@@ -2,7 +2,7 @@ import type { SatelliteNow, SatelliteTrack } from '../../model/types';
 import { clamp } from '../../utils/math';
 import { ECLIPSED_TRACK_STROKE, ECLIPSED_TRACK_WIDTH, MARKER_ECLIPSED_COLOR, MARKER_SUNLIT_COLOR, SUNLIT_TRACK_STROKE, SUNLIT_TRACK_WIDTH } from '../common/track-style';
 import type { DeviceHeading } from './ar-projection';
-import { horizonScreenY, projectToScreen } from './ar-projection';
+import { deriveVerticalFovDeg, horizonScreenY, projectToScreen } from './ar-projection';
 import { createGroundPattern } from './ground-texture';
 
 const TARGET_FRAME_INTERVAL_MS = 1000 / 30;
@@ -125,7 +125,7 @@ export class ArRenderer {
     ctx.clearRect(0, 0, width, height);
     if (width === 0 || height === 0) return;
 
-    const vFovDeg = this.hFovDeg * (height / width);
+    const vFovDeg = deriveVerticalFovDeg(this.hFovDeg, width, height);
     this.drawGround(vFovDeg);
 
     // Only satellites currently above the horizon — see the matching comment in

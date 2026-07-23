@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { horizonScreenY, projectToScreen } from './ar-projection';
+import { deriveVerticalFovDeg, horizonScreenY, projectToScreen } from './ar-projection';
 
 const hFov = 65;
 const vFov = 65 * (720 / 1280);
@@ -114,5 +114,38 @@ describe('horizonScreenY', () => {
     const level = horizonScreenY(0, vFov, height);
     const tiltedUp = horizonScreenY(20, vFov, height);
     expect(tiltedUp).toBeGreaterThan(level);
+  });
+});
+
+// Regression tests for a real bug: vFov was derived as `hFov * (height/width)`,
+// scaling the *angle* linearly by aspect ratio. That's not how rectilinear camera
+// FOV geometry works -- the *tangent* of the half-angle scales linearly with aspect
+// ratio, not the angle. On a portrait phone (height/width ~2.16) the old formula
+// inflated a 65deg horizontal FOV into 140deg+ vertical, instead of the correct
+// ~108deg, causing severe gnomonic-projection distortion for anything off-center
+// (reported as "everything shifts dramatically" near the horizon).
+describe('deriveVerticalFovDeg', () => {
+  it('returns the same FOV for a square aspect ratio', () => {
+    expect(deriveVerticalFovDeg(65, 100, 100)).toBeCloseTo(65, 6);
+  });
+
+  it('satisfies the correct tangent-scaling relationship, not linear angle scaling', () => {
+    const hFovDeg = 65;
+    const widthPx = 1170;
+    const heightPx = 2532;
+    const vFovDeg = deriveVerticalFovDeg(hFovDeg, widthPx, heightPx);
+
+    const tanHalfV = Math.tan((vFovDeg / 2) * (Math.PI / 180));
+    const tanHalfH = Math.tan((hFovDeg / 2) * (Math.PI / 180));
+    expect(tanHalfV).toBeCloseTo(tanHalfH * (heightPx / widthPx), 6);
+
+    // The old buggy formula for this exact aspect ratio (~2.16) gave ~140.7deg;
+    // the correct value should be meaningfully smaller.
+    const oldBuggyValue = hFovDeg * (heightPx / widthPx);
+    expect(vFovDeg).toBeLessThan(oldBuggyValue - 20);
+  });
+
+  it('stays under 180deg (the tangent-based formula cannot runaway like linear scaling can)', () => {
+    expect(deriveVerticalFovDeg(65, 390, 844)).toBeLessThan(180);
   });
 });

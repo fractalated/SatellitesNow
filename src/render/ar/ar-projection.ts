@@ -1,5 +1,23 @@
-import { degToRad } from '../../utils/math';
+import { degToRad, radToDeg } from '../../utils/math';
 import { cross, dot, normalize, type Vec3 } from '../../utils/vec3';
+
+/**
+ * Derives vertical FOV from horizontal FOV and the aspect ratio of the display,
+ * for a rectilinear (pinhole) camera. The correct relationship scales the
+ * *tangent* of the half-angle by the aspect ratio, not the angle itself —
+ * `vFov = hFov * (height/width)` (a previous, incorrect version of this) looks
+ * plausible but isn't how FOV geometry works: on a portrait phone screen
+ * (height/width ~2.16), it inflated a 65deg horizontal FOV into a 140deg+
+ * vertical FOV instead of the correct ~108deg, and the gnomonic projection is
+ * extremely sensitive to angle right where FOV is that overestimated —
+ * producing exactly the "everything shifts dramatically" distortion reported
+ * for anything away from dead-center, worst near the (miscalculated) edges.
+ */
+export function deriveVerticalFovDeg(hFovDeg: number, widthPx: number, heightPx: number): number {
+  const halfHFovRad = degToRad(hFovDeg / 2);
+  const halfVFovRad = Math.atan(Math.tan(halfHFovRad) * (heightPx / widthPx));
+  return 2 * radToDeg(halfVFovRad);
+}
 
 export interface DeviceHeading {
   headingDeg: number;
